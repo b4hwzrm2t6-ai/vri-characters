@@ -1,167 +1,226 @@
 import streamlit as st
 from fishr import Client
-import random
+import json
+import os
+import base64
 
-# --- НАСТРОЙКА СТРАНИЦЫ ---
 st.set_page_config(page_title="SYSTEM", page_icon="⚠️", layout="centered")
 
-# --- КАСТОМНЫЙ CSS (Стиль Соло Левелинга) ---
-st.markdown("""
+# Фон
+def get_base64_of_bin_file(bin_file):
+    with open(bin_file, 'rb') as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+try:
+    bg_img = get_base64_of_bin_file('bg.jpg')
+    bg_css = f"background-image: url('data:image/jpeg;base64,{bg_img}'); background-size: cover; background-position: center;"
+except:
+    bg_css = "background-color: #050510;"
+
+# --- КАСТОМНЫЙ CSS БЕЗ HTML-ТЕГОВ В ТЕКСТЕ ---
+st.markdown(f"""
 <style>
-    .stApp {
-        background-color: #0a0b10;
-        color: #8ab4f8;
-    }
-    .system-box {
-        background: rgba(10, 25, 50, 0.7);
-        border: 2px solid #4da6ff;
-        border-radius: 10px;
+    .stApp {{ {bg_css} }}
+    header {{visibility: hidden;}}
+    
+    /* Стилизация контейнеров Streamlit под окно Системы */
+    div[data-testid="stVerticalBlockBorderWrapper"] {{
+        background: rgba(5, 10, 30, 0.85) !important;
+        border: 2px solid #4da6ff !important;
+        border-radius: 5px !important;
+        box-shadow: 0 0 20px #4da6ff, inset 0 0 20px #4da6ff !important;
+        max-width: 600px;
+        margin: 0 auto;
         padding: 20px;
-        box-shadow: 0 0 15px #4da6ff, inset 0 0 15px #4da6ff;
-        margin-bottom: 20px;
-        transition: all 0.5s ease;
-    }
-    .system-title {
-        color: #4da6ff;
-        text-align: center;
-        font-family: 'Courier New', monospace;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-    }
-    .stat-name {
+    }}
+    
+    h1, h2, h3, p, span, div {{
+        font-family: 'Courier New', monospace !important;
         color: #8ab4f8;
-        font-weight: bold;
-    }
-    .stat-value {
-        color: #ffffff;
-        font-size: 20px;
-        float: right;
-    }
-    .stButton>button {
-        background-color: transparent;
-        color: #4da6ff;
-        border: 1px solid #4da6ff;
-        border-radius: 5px;
-        transition: all 0.3s;
-    }
-    .stButton>button:hover {
-        background-color: #4da6ff;
-        color: #0a0b10;
-        box-shadow: 0 0 10px #4da6ff;
-    }
+    }}
+    
+    .big-title {{
+        color: #ffffff !important;
+        text-align: center;
+        font-size: 32px !important;
+        letter-spacing: 5px;
+        text-shadow: 0 0 10px #4da6ff, 0 0 20px #4da6ff;
+    }}
+    
+    /* Кнопки */
+    .stButton>button {{
+        background-color: rgba(10, 25, 50, 0.8) !important;
+        color: #4da6ff !important;
+        border: 1px solid #4da6ff !important;
+        border-radius: 0px !important;
+        width: 100%;
+        font-family: 'Courier New', monospace !important;
+    }}
+    .stButton>button:hover {{
+        background-color: #4da6ff !important;
+        color: #000 !important;
+        box-shadow: 0 0 15px #4da6ff !important;
+    }}
+    
+    /* Поля ввода */
+    .stTextInput>div>div>input {{
+        background-color: rgba(10, 25, 50, 0.8) !important;
+        color: white !important;
+        border: 1px solid #4da6ff !important;
+        border-radius: 0px !important;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
-# --- ИНИЦИАЛИЗАЦИЯ ПАМЯТИ ИГРЫ ---
-if 'level' not in st.session_state:
-    st.session_state.level = 1
-    st.session_state.exp = 0
-    st.session_state.max_exp = 100
-    st.session_state.stats = {"Сила": 10, "Ловкость": 10, "Интеллект": 10, "Выносливость": 10}
-    st.session_state.points = 0
-    st.session_state.quest = None
-
 ai_client = Client()
 
-# --- СИСТЕМА РАНГОВ ---
+# --- БАЗА ДАННЫХ ---
+DB_FILE = "users_data.json"
+def load_data():
+    if os.path.exists(DB_FILE):
+        with open(DB_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+def save_data(data):
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+db = load_data()
+
+# --- ВХОД ---
+if 'current_user' not in st.session_state:
+    st.session_state.current_user = None
+
+if not st.session_state.current_user:
+    st.markdown("<h2 class='big-title' style='margin-top: 50px;'>ДОСТУП К СИСТЕМЕ</h2>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        username = st.text_input("Логин", placeholder="Введите логин...", label_visibility="collapsed")
+        password = st.text_input("Пароль", type="password", placeholder="Введите пароль...", label_visibility="collapsed")
+        if st.button("ВОЙТИ / РЕГИСТРАЦИЯ"):
+            if username and password:
+                if username not in db:
+                    db[username] = {
+                        "password": password, "level": 1, "exp": 0, "max_exp": 100, "points": 0,
+                        "stats": {"Сила": 10, "Выносливость": 10, "Ловкость": 10, "Интеллект": 10}, "quest": None
+                    }
+                    save_data(db)
+                    st.session_state.current_user = username
+                    st.rerun()
+                else:
+                    if db[username]["password"] == password:
+                        st.session_state.current_user = username
+                        st.rerun()
+                    else:
+                        st.error("Неверный пароль!")
+            else:
+                st.warning("Введите логин и пароль.")
+    st.stop()
+
+# --- ЛОГИКА ---
+user_data = db[st.session_state.current_user]
+def update_db():
+    db[st.session_state.current_user] = user_data
+    save_data(db)
+
 def get_rank(level):
-    if level < 5: return "E", "#8ab4f8", "серый"
-    elif level < 10: return "D", "#4da6ff", "синий"
-    elif level < 15: return "C", "#00ffcc", "бирюзовый"
-    elif level < 20: return "B", "#b366ff", "фиолетовый"
-    elif level < 30: return "A", "#ffcc00", "золотой"
-    elif level < 50: return "S", "#ff3333", "красный"
-    else: return "N", "#ffffff", "белый (Национальный)"
+    if level < 5: return "E", "#4da6ff"
+    elif level < 10: return "D", "#00e5ff"
+    elif level < 15: return "C", "#00ffaa"
+    elif level < 20: return "B", "#b366ff"
+    elif level < 30: return "A", "#ffcc00"
+    elif level < 50: return "S", "#ff3333"
+    else: return "N", "#ffffff"
 
-rank, color, rank_color_name = get_rank(st.session_state.level)
+rank_letter, rank_color = get_rank(user_data['level'])
 
-# --- ИНТЕРФЕЙС ---
-st.markdown(f"<h1 class='system-title' style='color: {color}; text-shadow: 0 0 10px {color};'>⚠️ Система активирована ⚠️</h1>", unsafe_allow_html=True)
-
-st.markdown(f"""
-<div class='system-box' style='border-color: {color}; box-shadow: 0 0 15px {color}, inset 0 0 15px {color};'>
-    <h2 class='system-title' style='color: {color};'>Статус</h2>
-    <p class='stat-name'>Ранг: <span class='stat-value' style='color: {color}; font-weight: bold; text-shadow: 0 0 5px {color};'>{rank}-Ранг</span></p>
-    <p class='stat-name'>Уровень: <span class='stat-value'>{st.session_state.level}</span></p>
-    <p class='stat-name'>Опыт: <span class='stat-value'>{st.session_state.exp} / {st.session_state.max_exp}</span></p>
-    <p class='stat-name'>Свободные очки: <span class='stat-value'>{st.session_state.points}</span></p>
-    <hr style='border-color: {color}; opacity: 0.5;'>
-    <p class='stat-name'>Сила: <span class='stat-value'>{st.session_state.stats['Сила']}</span></p>
-    <p class='stat-name'>Ловкость: <span class='stat-value'>{st.session_state.stats['Ловкость']}</span></p>
-    <p class='stat-name'>Интеллект: <span class='stat-value'>{st.session_state.stats['Интеллект']}</span></p>
-    <p class='stat-name'>Выносливость: <span class='stat-value'>{st.session_state.stats['Выносливость']}</span></p>
-</div>
-""", unsafe_allow_html=True)
-
-# Функция добавления опыта
 def add_exp(amount):
-    old_level = st.session_state.level
-    st.session_state.exp += amount
-    while st.session_state.exp >= st.session_state.max_exp:
-        st.session_state.exp -= st.session_state.max_exp
-        st.session_state.level += 1
-        st.session_state.max_exp = int(st.session_state.max_exp * 1.5)
-        st.session_state.points += 5
-        
-        new_rank, _, _ = get_rank(st.session_state.level)
-        old_rank, _, _ = get_rank(old_level)
-        
+    old_rank, _ = get_rank(user_data['level'])
+    user_data['exp'] += amount
+    while user_data['exp'] >= user_data['max_exp']:
+        user_data['exp'] -= user_data['max_exp']
+        user_data['level'] += 1
+        user_data['max_exp'] = int(user_data['max_exp'] * 1.5)
+        user_data['points'] += 5
+        new_rank, _ = get_rank(user_data['level'])
         if new_rank != old_rank:
-            st.success(f"🚨 ВНИМАНИЕ! Ваш ранг повышен до {new_rank}!")
-        st.success(f"🎉 УРОВЕНЬ ПОВЫШЕН! Теперь у тебя {st.session_state.level} уровень. Получено 5 очков характеристик!")
+            st.toast(f"🚨 РАНГ ПОВЫШЕН ДО {new_rank}!", icon="⚠️")
+        st.toast(f"🎉 УРОВЕНЬ {user_data['level']}!", icon="✨")
+    update_db()
 
-# --- ПРОКАЧКА ХАРАКТЕРИСТИК ---
-st.markdown("<h3 class='system-title'>Повседневные задания</h3>", unsafe_allow_html=True)
-col1, col2 = st.columns(2)
+# --- ГЛАВНОЕ ОКНО (Используем st.container с рамкой) ---
+with st.container(border=True):
+    st.markdown("<h1 class='big-title'>СИСТЕМА</h1>", unsafe_allow_html=True)
+    
+    st.info("**Поздравляем!**\nВы активировали систему.\nТеперь вы можете получать задания, повышать уровень и становиться сильнее.")
+    
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        st.write(f"👤 **Уровень:** {user_data['level']}")
+        st.write(f"Опыт: {user_data['exp']} / {user_data['max_exp']}")
+        st.write(f"Свободные очки: {user_data['points']}")
+    with c2:
+        st.markdown(f"<div style='text-align:center; border: 2px solid {rank_color}; box-shadow: 0 0 10px {rank_color}; padding:10px;'>"
+                    f"<div style='font-size:10px;'>РАНГ</div>"
+                    f"<div style='font-size:40px; color:{rank_color}; font-weight:bold;'>{rank_letter}</div>"
+                    f"<div style='font-size:10px;'>{rank_letter}-РАНГ</div></div>", unsafe_allow_html=True)
+    
+    st.divider()
+    st.write("**Характеристики:**")
+    st.write(f"❤️ Сила: {user_data['stats']['Сила']}")
+    st.write(f"🛡️ Выносливость: {user_data['stats']['Выносливость']}")
+    st.write(f"⚡ Ловкость: {user_data['stats']['Ловкость']}")
+    st.write(f"🧠 Интеллект: {user_data['stats']['Интеллект']}")
+    
+    st.divider()
+    st.warning(f"**Текущее задание:**\n{user_data['quest'] if user_data['quest'] else 'Выжить и стать сильнее.'}")
 
-with col1:
-    if st.button("💪 Отжаться 50 раз (+15 опыта)"):
-        add_exp(15)
-        st.rerun()
-    if st.button("🧠 Прочитать 10 страниц (+10 опыта)"):
-        add_exp(10)
-        st.rerun()
+# --- УПРАВЛЕНИЕ ---
+st.write("")
+if st.button("Выйти из аккаунта"):
+    st.session_state.current_user = None
+    st.rerun()
 
-with col2:
-    if st.button("🏃 Пробежать 3 км (+20 опыта)"):
-        add_exp(20)
-        st.rerun()
-    if st.button("🧘 Помедитировать 10 минут (+5 опыта)"):
-        add_exp(5)
-        st.rerun()
+st.write("### Повседневные задания")
+c1, c2 = st.columns(2)
+with c1:
+    if st.button("💪 Отжаться 50 раз (+15)"): add_exp(15); st.rerun()
+    if st.button("🧠 Прочитать 10 страниц (+10)"): add_exp(10); st.rerun()
+with c2:
+    if st.button("🏃 Пробежать 3 км (+20)"): add_exp(20); st.rerun()
+    if st.button("🧘 Помедитировать (+5)"): add_exp(5); st.rerun()
 
-# --- ГЕНЕРАЦИЯ КВЕСТОВ ---
-st.markdown("<h3 class='system-title'>Ежедневный квест</h3>", unsafe_allow_html=True)
+if user_data['points'] > 0:
+    st.write(f"### Свободные очки: {user_data['points']}")
+    c_stat, c_btn = st.columns([2,1])
+    with c_stat:
+        stat_up = st.selectbox("Выберите характеристику:", list(user_data['stats'].keys()), label_visibility="collapsed")
+    with c_btn:
+        if st.button("Увеличить"):
+            user_data['stats'][stat_up] += 1
+            user_data['points'] -= 1
+            update_db()
+            st.rerun()
 
-if st.button("Сгенерировать квест"):
-    with st.spinner("Система генерирует задание..."):
+st.write("### Генератор квестов")
+if st.button("⚠️ ПОЛУЧИТЬ НОВОЕ ЗАДАНИЕ"):
+    with st.spinner("Связь с системой..."):
         try:
+            prompt = f"Ты — Система из Solo Leveling. Игрок {rank_letter}-ранга. Придумай ОДИН реальный и выполнимый квест. Категории: спорт, учеба, быт. Формат: 'Задание: [действие с цифрами]. Награда: [число] опыта.'"
             response = ai_client.chat.completions.create(
                 model="deepai/standard",
-                messages=[{"role": "user", "content": f"Ты - Система из аниме Solo Leveling. Игрок {rank}-ранга. Придумай мне один короткий ежедневный квест на русском языке (например: отжаться 100 раз, выучить 10 новых слов, убраться в комнате). Напиши только название квеста и награду в опыте (от 10 до 30). Сделай текст коротким и командным тоном."}]
+                messages=[{"role": "user", "content": prompt}]
             )
-            st.session_state.quest = response.text
+            user_data['quest'] = response.text.strip()
+            update_db()
+            st.rerun()
         except Exception as e:
-            st.error(f"Ошибка генерации: {e}")
-
-if st.session_state.quest:
-    st.markdown(f"""
-    <div class='system-box' style='border-color: #ffcc00; box-shadow: 0 0 15px #ffcc00;'>
-        <h3 class='system-title' style='color: #ffcc00;'>Новый квест!</h3>
-        <p style='color: #ffffff; font-size: 18px;'>{st.session_state.quest}</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    if st.button("✅ Квест выполнен! Забрать награду"):
-        add_exp(20) 
-        st.session_state.quest = None
+            st.error(f"Ошибка: {e}")
+            
+if user_data['quest']:
+    if st.button("✅ ЗАДАНИЕ ВЫПОЛНЕНО (+20 ОПЫТА)"):
+        add_exp(20)
+        user_data['quest'] = None
+        update_db()
         st.rerun()
-
-# --- РАСПРЕДЕЛЕНИЕ ОЧКОВ ---
-if st.session_state.points > 0:
-    st.markdown("<h3 class='system-title'>Распределение очков</h3>", unsafe_allow_html=True)
-    stat_to_up = st.selectbox("Куда вложить очки?", list(st.session_state.stats.keys()))
-    if st.button("Увеличить характеристику"):
-        st.session_state.stats[stat_to_up] += 1
-        st.session_state.points -= 1
-        st.rerun() 
