@@ -57,20 +57,16 @@ st.markdown(f"""
         padding: 5px 20px !important;
     }}
     
-    /* Сайдбар */
-    [data-testid="stSidebar"] {{
-        background-color: rgba(10, 10, 10, 0.95) !important;
-        border-right: 1px solid #333;
+    /* Стилизация выпадающего списка (чтобы не выбивался из дизайна) */
+    div[data-baseweb="select"] > div {{
+        background-color: rgba(20, 20, 20, 0.9) !important;
+        color: white !important;
+        border: 1px solid #555 !important;
     }}
     
-    /* Текст в сайдбаре */
-    [data-testid="stSidebar"] * {{
-        color: #ccc;
-    }}
-    
-    /* Кнопки в сайдбаре */
+    /* Кнопки */
     .stButton>button {{
-        background-color: transparent !important;
+        background-color: rgba(30, 30, 30, 0.8) !important;
         color: #fff !important;
         border: 1px solid #555 !important;
         border-radius: 10px !important;
@@ -97,7 +93,7 @@ def save_data(data):
 db = load_data()
 ai_client = Client()
 
-# --- ПЕРСОНАЖИ (Все, кого ты просила) ---
+# --- ПЕРСОНАЖИ ---
 CHARACTER_PROMPTS = {
     "Сон Джин-у": "Ты — Сон Джин-у из Solo Leveling. Ты сильный, немногословный охотник. Ты прошел через многое и стал тенью. Отвечай спокойно, уверенно, иногда с легкой усталостью. Ты не ИИ.",
     "Резе": "Ты — Резе из Chainsaw Man. Ты демон бомбы. Ты агрессивная, эмоциональная, но глубоко привязана к Дендзи. Ты говоришь прямо, иногда высокомерно. Отвечай от первого лица.",
@@ -150,36 +146,32 @@ def update_db():
     db[st.session_state.current_user] = user_data
     save_data(db)
 
-# --- САЙДБАР (Список персонажей) ---
-st.sidebar.markdown(f"<h2 style='color:white; text-align:center;'>💬 Чаты</h2>", unsafe_allow_html=True)
+# --- ВЫБОР ПЕРСОНАЖА (На главном экране) ---
+st.markdown("<h3 style='color:white; text-align:center;'>Выбери персонажа:</h3>", unsafe_allow_html=True)
 
-# Кнопки выбора персонажей
-for char_name in CHARACTER_PROMPTS.keys():
-    # Подсвечиваем активного персонажа
-    if "selected_char" in st.session_state and st.session_state.selected_char == char_name:
-        st.sidebar.markdown(f"**🟢 {char_name}**")
-    else:
-        if st.sidebar.button(f"👤 {char_name}", key=f"btn_{char_name}"):
-            st.session_state.selected_char = char_name
+selected_char = st.selectbox(
+    "Персонажи:", 
+    list(CHARACTER_PROMPTS.keys()), 
+    label_visibility="collapsed"
+)
+
+st.session_state.selected_char = selected_char
+
+# Кнопки управления (Очистить и Выйти)
+col_btn1, col_btn2 = st.columns(2)
+with col_btn1:
+    if st.button("🗑️ Очистить чат", use_container_width=True):
+        if selected_char in user_data["chats"]:
+            del user_data["chats"][selected_char]
+            update_db()
             st.rerun()
-
-st.sidebar.divider()
-if st.sidebar.button("🗑️ Очистить текущий чат"):
-    if "selected_char" in st.session_state and st.session_state.selected_char in user_data["chats"]:
-        del user_data["chats"][st.session_state.selected_char]
-        update_db()
+with col_btn2:
+    if st.button("🚪 Выйти", use_container_width=True):
+        st.session_state.current_user = None
+        st.session_state.selected_char = None
         st.rerun()
 
-if st.sidebar.button("🚪 Выйти"):
-    st.session_state.current_user = None
-    st.session_state.selected_char = None
-    st.rerun()
-
-# Если персонаж еще не выбран, выбираем первого по умолчанию
-if "selected_char" not in st.session_state:
-    st.session_state.selected_char = list(CHARACTER_PROMPTS.keys())[0]
-
-selected_char = st.session_state.selected_char
+st.divider()
 
 # --- ИНТЕРФЕЙС ЧАТА ---
 st.markdown(f"<h3 style='color:white; text-align:center; margin-bottom: 20px;'>Чат с {selected_char}</h3>", unsafe_allow_html=True)
@@ -193,10 +185,10 @@ if selected_char not in user_data["chats"]:
 
 chat_history = user_data["chats"][selected_char]
 
-# Если чат пустой (только системный промпт), показываем заглушку
+# Заглушка, если сообщений нет
 if len(chat_history) == 1:
     st.markdown("""
-        <div style='text-align: center; color: #555; margin-top: 100px;'>
+        <div style='text-align: center; color: #555; margin-top: 50px;'>
             <h1 style='font-size: 50px;'>💬</h1>
             <p>Здесь пока нет сообщений</p>
         </div>
@@ -220,7 +212,7 @@ if prompt := st.chat_input(f"Сообщение для {selected_char}..."):
         with st.spinner("..."):
             try:
                 system_prompt = chat_history[0]["content"]
-                # Берем последние 5 сообщений для контекста (чтобы не перегружать бесплатную модель)
+                # Берем последние 5 сообщений для контекста
                 recent_history = chat_history[-5:]
                 context_text = "\n".join([f"{m['role']}: {m['content']}" for m in recent_history if m['role'] != 'system'])
                 
